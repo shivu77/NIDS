@@ -1,0 +1,98 @@
+#Training the KDD 1999 cup using Neural Network
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import f1_score, classification_report
+
+#Reads the data
+data = pd.read_csv("/content/kddcup_10_percent_with_headers.csv")
+
+##To change the categorical variables into the numerical variables
+from typing import Any
+# Label encoding categorical features
+encoder = LabelEncoder()
+data['protocol_type'] = encoder.fit_transform(data['protocol_type'])
+data['service'] = encoder.fit_transform(data['service'])  # Service
+data['flag'] = encoder.fit_transform(data['flag'])  # Flag
+
+# Normalizing features
+scaler = MinMaxScaler()
+data_scaled = scaler.fit_transform(data.iloc[:, :-1])  # Scaling except the target column
+
+# Splitting features and labels
+X = data_scaled
+y = data.iloc[:, -1]  # Target is typically the last column
+
+# Splitting features and labels
+X = data_scaled
+y = data.iloc[:, -1]  # Target is typically the last column
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Building a neural network model
+model = Sequential()
+model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
+model.add(Dropout(0.3))  # Optional dropout layer for regularization
+model.add(Dense(32, activation='relu'))
+model.add(Dense(1, activation='sigmoid'))  # Output layer for binary classification
+
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+print(type(X_train), type(y_train))
+print(X_train.dtype, y_train.dtype)
+
+data.label.unique()
+
+# Manually label 'normal.' as 0 and specific attacks as 1
+y_train = np.where(y_train == 'normal.', 0,
+                   np.where((y_train == 'neptune.') | (y_train == 'smurf.') | (y_train == 'teardrop.'), 1, -1))
+
+y_test = np.where(y_test == 'normal.', 0,
+                  np.where((y_test == 'neptune.') | (y_test == 'smurf.') | (y_test == 'teardrop.'), 1, -1))
+
+# Optionally, remove rows that are not 'normal' or the specific attack types
+X_train = X_train[y_train != -1]
+y_train = y_train[y_train != -1]
+X_test = X_test[y_test != -1]
+y_test = y_test[y_test != -1]
+
+#train the model
+history = model.fit(X_train, y_train, epochs=50, batch_size=64, validation_data=(X_test, y_test))
+
+#Result
+loss, accuracy = model.evaluate(X_test, y_test)
+print(f'Test Accuracy: {accuracy*100:.2f}%')
+
+import matplotlib.pyplot as plt
+
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend()
+plt.show()
+
+# Get predicted classes for the test data
+y_pred = model.predict(X_test)
+# Convert the predictions from probabilities to class labels (binary classification)
+y_pred_classes = (y_pred > 0.5).astype("int32")  # For binary classification
+
+# For multiclass classification
+y_pred_classes = y_pred.argmax(axis=-1)
+
+# For binary classification
+f1 = f1_score(y_test, y_pred_classes)
+
+# For multiclass classification (if applicable)
+f1_macro = f1_score(y_test, y_pred_classes, average='macro')  # Average F1 across all classes
+f1_weighted = f1_score(y_test, y_pred_classes, average='weighted')  # F1 weighted by support
+
+print(classification_report(y_test, y_pred_classes))
+
